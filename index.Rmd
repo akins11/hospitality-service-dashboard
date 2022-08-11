@@ -1,0 +1,288 @@
+---
+title: "Activity Dashboard"
+output: 
+  flexdashboard::flex_dashboard:
+    theme:
+      version: 5
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse) |> suppressPackageStartupMessages()
+library(patchwork)
+library(ggtext) |> suppressPackageStartupMessages()
+library(scales) |> suppressPackageStartupMessages()
+library(extrafont)
+library(reactable)
+library(reactablefmtr)
+```
+
+```{r}
+source("C:/Users/AYOMIDE/Documents/R/R_Projects/Hotel_/DB_output.R",
+       local = knitr::knit_global())
+```
+
+```{r}
+htl <- readxl::read_xlsx("~/DataG/Hotel data/HotelCustomersDataset.xlsx")
+full_country_name <- read_csv(
+  "C:/Users/AYOMIDE/Documents/DataG/country_code.csv")
+
+names_country <- select(htl, Nationality) |>
+  left_join(full_country_name, by = c("Nationality" = "ISO3"), keep = TRUE) |>
+  select(Nationality, country_name) |>
+  deframe()
+
+htl <- htl |>
+  janitor::clean_names() |>
+  mutate(across(c(lodging_revenue, other_revenue), as.double)) |>
+  mutate(age = as.integer(age),
+         total_revenue = lodging_revenue + other_revenue,
+         total_bookings = bookings_canceled + bookings_no_showed + bookings_checked_in,
+         country_IS03 = nationality,
+         nationality = names_country) |>
+  select(-c(id, name_hash, doc_id_hash)) |>
+  filter(days_since_last_stay > 0 & days_since_first_stay > 0)
+```
+
+Hotel Performance {data-orientation=rows data-vertical_layout=fill}
+================================================================================
+
+Row {data-height="200"}
+--------------------------------------------------------------------------------
+
+### Average Lead Time
+```{r}
+htl |>
+  filter(average_lead_time >= 0) |>
+  summarise(median = median(average_lead_time)) |>
+  pull() |>
+  
+  valueBox(icon = "fa-clock", color = "#F79256")
+
+```
+
+### Unique Nationality
+```{r}
+n_distinct(htl$nationality) |>
+  
+  valueBox(icon = "fa-users", color = "#FBD1A2")
+```
+
+### Total Revenue
+```{r}
+htl |>
+  summarise(total = sum(total_revenue)) |>
+  pull() |>
+  comma() |>
+  
+  valueBox(icon = "fa-euro-sign", color = "#7DCFB6")
+```
+
+### Guest Check-In
+```{r}
+htl |>
+  summarise(total_checked_in = sum(bookings_checked_in)) |>
+  mutate(
+    percentage = round(total_checked_in / sum(htl$total_bookings)*100, 3)) |>
+  pull() |>
+  paste0("%") |>
+  
+  valueBox(icon = "fa-user-check", color = "#00B2CA")
+```
+
+### Average Room Night
+```{r}
+htl |>
+  summarise(room_nights = round(mean(room_nights), 2)) |>
+  pull() |>
+  
+  valueBox(icon = "fa-bed", color = "#0F80AA")
+```
+
+Row {data-height="800"}
+--------------------------------------------------------------------------------
+
+### Source of Revenue
+```{r}
+source_revenue_doughnut_chart()
+```
+
+### Revenue Generated & Market Segment
+```{r fig.width=8}
+revenue_market_segment()
+```
+
+
+
+
+
+Nationality Summary {data-orientation=columns data-vertical_layout=fill}
+================================================================================
+
+Column {data-width=500 .tabset .tabset-fade .no-padding}
+--------------------------------------------------------------------------------
+### Direct
+```{r}
+country_distibution_channel_plot("Direct")
+```
+
+### Travel Agent
+```{r}
+country_distibution_channel_plot("Travel Agent/Operator")
+```
+
+### Corporate
+```{r}
+country_distibution_channel_plot("Corporate")
+```
+
+### E-Platforms
+```{r}
+country_distibution_channel_plot("Electronic Distribution")
+```
+
+
+### Median average lead time
+```{r}
+days_summary(df = htl, 
+             days_var = "average_lead_time",
+             agg_fun = "median")
+```
+
+### Maximum average lead time
+```{r}
+days_summary(df = htl, 
+             days_var = "average_lead_time",
+             agg_fun = "maximum")
+```
+
+
+Column {data-width=400}
+--------------------------------------------------------------------------------
+### Country & Distribution Channel
+```{r}
+country_distribution_channel_table()
+```
+
+
+### Average Lead Time Of Guest
+```{r}
+country_average_lead_time_table(df = htl)
+```
+
+
+
+
+
+Distribution Channel {data-orientation=rows data-vertical_layout=fill}
+================================================================================
+
+Row {data-height=500 .no-padding}
+--------------------------------------------------------------------------------
+### Unique Guests
+```{r fig.width=12}
+unique_guest_distribution_channel()
+```
+
+### Guest Check In
+```{r fig.width=12}
+distribution_channel_checked_in_bookings()
+```
+
+
+Row {data-height=500 .no-padding}
+--------------------------------------------------------------------------------
+### Canceled Bookings
+```{r fig.width=12}
+distribution_channel_canceled_bookings()
+```
+
+### Rate Of Canceled Bookings
+```{r fig.width=12}
+distribution_channel_canceled_rates()
+```
+
+
+
+
+Guest Activity & Revenue {data-orientation=columns data-vertical_layout=fill}
+================================================================================
+Column {data-width=500 .no-padding}
+--------------------------------------------------------------------------------
+### Guest Last Stay In The Hotel
+```{r}
+month_guest_last_stayed()
+```
+
+Column {data-width=480}
+--------------------------------------------------------------------------------
+### Bookings Summary
+```{r}
+guest_bookings_summary_since_last_stay()
+```
+
+### Revenue Summary
+```{r fig.width=12}
+revenue_generated()
+```
+
+
+
+
+Guest Request {data-orientation=columns data-vertical_layout=fill}
+================================================================================
+Column {data-width=550 .tabset .tabset-fade .no-padding}
+--------------------------------------------------------------------------------
+### Floor Level
+```{r}
+guest_request_revenue(df = htl, 
+                      request_type = "floor_level",
+                      revenue_type = "total_revenue",
+                      agg_fun = "median")
+```
+
+### Room Features
+```{r}
+guest_request_revenue(df = htl, 
+                      request_type = "room_features",
+                      revenue_type = "total_revenue",
+                      agg_fun = "median")
+```
+
+### Lodging Environment
+```{r}
+guest_request_revenue(df = htl, 
+                      request_type = "room_environment",
+                      revenue_type = "total_revenue",
+                      agg_fun = "median")
+```
+
+
+
+Column {data-width=450 .tabset .tabset-fade .no-padding}
+--------------------------------------------------------------------------------
+### Floor Level
+```{r}
+guest_request_revenue(df = htl, 
+                      request_type = "floor_level",
+                      revenue_type = "lodging_revenue",
+                      agg_fun = "median")
+```
+
+### Room Features 
+```{r}
+guest_request_revenue(df = htl, 
+                      request_type = "room_features",
+                      revenue_type = "lodging_revenue",
+                      agg_fun = "median")
+```
+
+### Lodging Environment
+```{r}
+guest_request_revenue(df = htl, 
+                      request_type = "room_environment",
+                      revenue_type = "lodging_revenue",
+                      agg_fun = "median")
+```
+
+
